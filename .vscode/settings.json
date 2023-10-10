@@ -1,0 +1,7 @@
+{
+    "java.project.sourcePaths": [
+        "logger\\src",
+        "Assembler\\src",
+        "Emulator\\src"
+    ]
+}
