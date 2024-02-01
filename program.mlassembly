@@ -1,0 +1,28 @@
+; Multiply register by a number
+; Multiply contents of R0 by 4
+; Use a LCV (R4) to count the current iteration
+; Add 4 to R0 until the loop ends
+
+LD R0, 5
+
+BRA newname
+
+LD R4, 0
+.label1
+CMP R4, 4
+BEQ label2
+ADD R3, R0
+ADD R4, 1
+BRA label1
+.label2
+ADD R0, 1
+BRA label3
+; Continue the program
+
+.label3
+LD R0, R1
+BRA newname
+
+.newname
+MULT R0, 10
+MULT R0, R1

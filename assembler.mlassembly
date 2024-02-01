@@ -1,0 +1,792 @@
+; Start by reading through each byte in a loop storing each byte in another memory location
+; Stop looping through when a newline character is reached, then branch to another location for checking the line
+
+; Set R5 to 0 (tracks the line number memory address AKA lineNum * 4)
+LD R5, 0
+; Set R6 to 0 (tracks the mem addr while reading chars)
+LD R6, 0
+; Set R7 to 32768 (tracks the mem addr of the instructions)
+LD R7, 32768
+
+.findLabels_loop
+LD R0, R6
+CMP R0, 3
+BEQ startAssembling
+CMP R0, 46
+BEQ label
+CMP R0, 59
+BEQ findNextLine
+CMP R0, 13
+BEQ nextLine
+ADD R5, 4
+BRA findNextLine
+
+.findNextLine
+ADD R6, 1
+LD R0, R6
+CMP R0, 13
+BNE findNextLine
+ADD R6, 2
+BRA findLabels_loop
+
+.nextLine
+ADD R6, 2
+BRA findLabels_loop
+
+.startAssembling
+LD R6, 0
+BRA readLine
+
+.readLine
+LD R0, R6
+; R0 contains the contents of memory at index R6
+; Check if EOF (3) has been reached
+CMP R0, 3
+BEQ end
+; Check if the contents of R0 is a semicolon (59), a CR/newline (13), or a period (46)
+CMP R0, 59
+BEQ noInstructionFound
+CMP R0, 13
+BEQ newLine
+CMP R0, 46
+BEQ noInstructionFound
+
+; Check for the LD instruction
+.LD
+CMP R0, 76
+BNE ST
+ADD R6, 1
+LD R0, R6
+CMP R0, 68
+BNE noInstructionFound
+; LD instruction has been confirmed, inc R6 by 3 to skip the space and the R
+ADD R6, 3
+LD R1, R6
+SUB R1, 48
+; Set the register value
+ADD R7, 1
+STL R1, R7
+SUB R7, 1
+; Increment by 3 to skip the comma and the space
+ADD R6, 3
+LD R0, R6
+; Check for the R (82)
+CMP R0, 82
+BEQ LDR
+; Check for the $ (36)
+CMP R0, 36
+BEQ LDM
+; Otherwise, this is loading a direct value
+; Set the OPCODE to 0x00 (Load Value)
+LD R0, 0
+STL R0, R7
+ADD R7, 2
+BRA store_val
+
+
+.LDR
+ADD R6, 1
+; Set the OPCODE to 0x01 (Load Register)
+LD R0, 1
+STL R0, R7
+ADD R7, 3
+LD R0, R6
+SUB R0, 48
+STL R0, R7
+ADD R7, 1
+BRA findNewLine
+
+
+.LDM
+; Set the OPCODE to 0x02 (Load Memory)
+LD R0, 2
+STL R0, R7
+ADD R7, 2
+ADD R6, 1
+BRA store_val
+
+
+; Check for the ST/STL/STH instruction
+.ST
+CMP R0, 83
+BNE CMP
+ADD R6, 1
+LD R0, R6
+CMP R0, 84
+SUB R6, 1
+BNE SUB
+ADD R6, 2
+LD R0, R6
+CMP R0, 76
+BEQ STL
+CMP R0, 72
+BEQ STH
+; ST instruction has been confirmed
+; Add 2 to R6 to skip the R
+ADD R6, 2
+; Load R3 with a 0 for ST
+LD R3, 0
+BRA ST_next
+
+.STL
+; STL instruction has been confirmed
+; Add 3 to R6 to skip the R
+ADD R6, 3
+; Load R3 with a 1 for STL
+LD R3, 1
+BRA ST_next
+
+.STH
+; STH instruction has been confirmed
+; Add 3 to R6 to skip the R
+ADD R6, 3
+; Load R3 with a 2 for STH
+LD R3, 2
+BRA ST_next
+
+.ST_next
+LD R0, R6
+SUB R0, 48
+; Add 1 to R7, store the reg number, then minus 1
+ADD R7, 1
+STL R0, R7
+SUB R7, 1
+ADD R6, 3
+LD R0, R6
+CMP R0, 36
+BNE ST_reg
+; There is a direct mem addr
+CMP R3, 0
+BEQ ST_opcode
+CMP R3, 1
+BEQ STL_opcode
+CMP R3, 2
+BEQ STH_opcode
+
+.ST_opcode
+; Set the OPCODE to 0x10 (16)
+LD R0, 16
+BRA ST_store_opcode
+
+.STL_opcode
+; Set the OPCODE to 0x11 (17)
+LD R0, 17
+BRA ST_store_opcode
+
+.STH_opcode
+; Set the OPCODE to 0x12 (18)
+LD R0, 18
+BRA ST_store_opcode
+
+.ST_store_opcode
+STL R0, R7
+ADD R7, 2
+ADD R6, 1
+BRA store_val
+
+
+; There is a register number
+.ST_reg
+CMP R3, 0
+BEQ ST_reg_opcode
+CMP R3, 1
+BEQ STL_reg_opcode
+CMP R3, 2
+BEQ STH_reg_opcode
+
+.ST_reg_opcode
+; Set the OPCODE to 0x13 (19)
+LD R0, 19
+BRA ST_reg_store_opcode
+
+.STL_reg_opcode
+; Set the OPCODE to 0x14 (20)
+LD R0, 20
+BRA ST_reg_store_opcode
+
+.STH_reg_opcode
+; Set the OPCODE to 0x15 (21)
+LD R0, 21
+BRA ST_reg_store_opcode
+
+.ST_reg_store_opcode
+STL R0, R7
+ADD R7, 3
+ADD R6, 1
+LD R0, R6
+SUB R0, 48
+STL R0, R7
+ADD R7, 1
+BRA findNewLine
+
+
+; Check for the CMP instruction
+.CMP
+CMP R0, 67
+BNE BEQ
+ADD R6, 1
+LD R0, R6
+CMP R0, 77
+BNE noInstructionFound
+ADD R6, 1
+LD R0, R6
+CMP R0, 80
+BNE noInstructionFound
+; CMP instruction confirmed
+; Add 3 to R6 to get the reg number
+ADD R6, 3
+LD R0, R6
+SUB R0, 48
+; Set the register value
+ADD R7, 1
+STL R0, R7
+SUB R7, 1
+; Add 3 to R6 to check for R
+ADD R6, 3
+LD R0, R6
+CMP R0, 82
+BEQ CMP_reg
+; Set the OPCODE to 0x21 (33)
+LD R0, 33
+STL R0, R7
+ADD R7, 2
+BRA store_val
+
+; Register value
+.CMP_reg
+; Set the OPCODE to 0x20 (32)
+LD R0, 32
+STL R0, R7
+ADD R7, 3
+ADD R6, 1
+LD R0, R6
+SUB R0, 48
+; Store the register number in dataLow
+STL R0, R7
+ADD R7, 1
+BRA findNewLine
+
+
+; Check for the branch instructions
+.BEQ
+CMP R0, 66
+BNE ADD
+ADD R6, 1
+LD R0, R6
+CMP R0, 69
+BNE BGT
+ADD R6, 1
+LD R0, R6
+CMP R0, 81
+BNE noInstructionFound
+; Set the OPCODE to 0x30 (48)
+LD R0, 48
+BRA branchLabel
+
+.BGT
+CMP R0, 71
+BNE BLT
+ADD R6, 1
+LD R0, R6
+CMP R0, 84
+BNE noInstructionFound
+; Set the OPCODE to 0x31 (49)
+LD R0, 49
+BRA branchLabel
+
+.BLT
+CMP R0, 76
+BNE BRA
+ADD R6, 1
+LD R0, R6
+CMP R0, 84
+BNE noInstructionFound
+; Set the OPCODE to 0x32 (50)
+LD R0, 50
+BRA branchLabel
+
+.BRA
+CMP R0, 82
+BNE BNE
+ADD R6, 1
+LD R0, R6
+CMP R0, 65
+BNE noInstructionFound
+; Set the OPCODE to 0x33 (51)
+LD R0, 51
+BRA branchLabel
+
+.BNE
+CMP R0, 78
+BNE noInstructionFound
+ADD R6, 1
+LD R0, R6
+CMP R0, 69
+BNE noInstructionFound
+; Set the OPCODE to 0x34 (52)
+LD R0, 52
+BRA branchLabel
+
+
+.branchLabel
+STL R0, R7
+ADD R7, 1
+LD R0, 0
+; R7 points to second byte in instruction
+STL R0, R7
+ADD R7, 1
+; R7 points to the third byte in instruction
+; Find the label, get the addr, set addr into memory
+ADD R6, 2
+; Mem addr $40960/1 will contain the initial mem addr of R6 (first char in label)
+ST R6, $40960
+LD R1, 36864
+
+.branchLabel_loop
+LD R0, R6
+CMP R0, 13
+; If a CR is found in the asm label, store the mem addr in R7 memory
+BEQ branchStore
+LD R2, R1
+CMP R2, 13
+BNE branchLabel_loop_continue
+; If a CR is found in the label table, skip ahead 3 in R1 and reset the asm label counter
+ADD R1, 3
+LD R6, $40960
+MULT R6, 256
+LD R3, $40961
+ADD R6, R3
+BRA branchLabel_loop
+.branchLabel_loop_continue
+CMP R0, R2
+; If the char in the asm label doesn't match the char in the table, find the next label
+BNE branchLabel_findNext
+; So far, the label is correct, add 1 to R6 and R1 to check the next char
+ADD R1, 1
+ADD R6, 1
+BRA branchLabel_loop
+
+; Finds the next label to check
+.branchLabel_findNext
+ADD R1, 1
+LD R0, R1
+CMP R0, 13
+BNE branchLabel_findNext
+ADD R1, 3
+LD R6, $40960
+MULT R6, 256
+LD R3, $40961
+ADD R6, R3
+BRA branchLabel_loop
+
+; Write the mem addr from the label table into memory at R7
+.branchStore
+LD R0, R1
+CMP R0, 13
+BNE branchStore_zeros
+ADD R1, 1
+LD R0, R1
+STL R0, R7
+ADD R7, 1
+ADD R1, 1
+LD R0, R1
+STL R0, R7
+ADD R7, 1
+BRA newLine
+
+; Write 0's in the mem addr portion of the instruction
+.branchStore_zeros
+LD R0, 0
+ST R0, R7
+ADD R7, 2
+BRA newLine
+
+; Check for the ADD instruction
+.ADD
+CMP R0, 65
+BNE SUB
+ADD R6, 1
+LD R0, R6
+CMP R0, 68
+BNE noInstructionFound
+ADD R6, 1
+LD R0, R6
+CMP R0, 68
+BNE noInstructionFound
+; ADD instruction confirmed
+; Add 3 to R6 to get the reg number
+ADD R6, 3
+LD R0, R6
+SUB R0, 48
+; Set the register value
+ADD R7, 1
+STL R0, R7
+SUB R7, 1
+; Add 3 to R6 to check for R
+ADD R6, 3
+LD R0, R6
+CMP R0, 82
+BEQ ADD_reg
+; Set the OPCODE to 0x40 (64)
+LD R0, 64
+STL R0, R7
+ADD R7, 2
+BRA store_val
+
+; Register value
+.ADD_reg
+; Set the OPCODE to 0x43 (67)
+LD R0, 67
+STL R0, R7
+ADD R7, 3
+ADD R6, 1
+LD R0, R6
+SUB R0, 48
+; Store the register number in dataLow
+STL R0, R7
+ADD R7, 1
+BRA findNewLine
+
+
+; Check for the SUB instruction
+.SUB
+LD R0, R6
+CMP R0, 83
+BNE MULT
+ADD R6, 1
+LD R0, R6
+CMP R0, 85
+BNE noInstructionFound
+ADD R6, 1
+LD R0, R6
+CMP R0, 66
+BNE noInstructionFound
+; SUB instruction confirmed
+; Add 3 to R6 to get the reg number
+ADD R6, 3
+LD R0, R6
+SUB R0, 48
+; Set the register value
+ADD R7, 1
+STL R0, R7
+SUB R7, 1
+; Add 3 to R6 to check for R
+ADD R6, 3
+LD R0, R6
+CMP R0, 82
+BEQ SUB_reg
+; Set the OPCODE to 0x41 (65)
+LD R0, 65
+STL R0, R7
+ADD R7, 2
+BRA store_val
+
+; Register value
+.SUB_reg
+; Set the OPCODE to 0x44 (68)
+LD R0, 68
+STL R0, R7
+ADD R7, 3
+ADD R6, 1
+LD R0, R6
+SUB R0, 48
+; Store the register number in dataLow
+STL R0, R7
+ADD R7, 1
+BRA findNewLine
+
+
+; Check for the MULT instruction
+.MULT
+LD R0, R6
+CMP R0, 77
+BNE HALT
+ADD R6, 1
+LD R0, R6
+CMP R0, 85
+BNE noInstructionFound
+ADD R6, 1
+LD R0, R6
+CMP R0, 76
+BNE noInstructionFound
+ADD R6, 1
+LD R0, R6
+CMP R0, 84
+BNE noInstructionFound
+; MULT instruction confirmed
+; Add 3 to R6 to get the reg number
+ADD R6, 3
+LD R0, R6
+SUB R0, 48
+; Set the register value
+ADD R7, 1
+STL R0, R7
+SUB R7, 1
+; Add 3 to R6 to check for R
+ADD R6, 3
+LD R0, R6
+CMP R0, 82
+BEQ MULT_reg
+; Set the OPCODE to 0x42 (66)
+LD R0, 66
+STL R0, R7
+ADD R7, 2
+BRA store_val
+
+; Register value
+.MULT_reg
+; Set the OPCODE to 0x45 (69)
+LD R0, 69
+STL R0, R7
+ADD R7, 3
+ADD R6, 1
+LD R0, R6
+SUB R0, 48
+; Store the register number in dataLow
+STL R0, R7
+ADD R7, 1
+BRA findNewLine
+
+
+; Check for the HALT instruction
+.HALT
+LD R0, R6
+CMP R0, 72
+BNE NOOP
+ADD R6, 1
+LD R0, R6
+CMP R0, 65
+BNE noInstructionFound
+ADD R6, 1
+LD R0, R6
+CMP R0, 76
+BNE noInstructionFound
+ADD R6, 1
+LD R0, R6
+CMP R0, 84
+BNE noInstructionFound
+; HALT instruction confirmed
+; Set the OPCODE to 0xFE (254)
+LD R0, 254
+STL R0, R7
+ADD R7, 1
+; Set the register value to 0xFF (255)
+LD R0, 255
+STL R0, R7
+ADD R7, 1
+; Set the dataHigh to 0xFE (254)
+LD R0, 254
+STL R0, R7
+ADD R7, 1
+; Set the dataLow to 0xFF (255)
+LD R0, 255
+STL R0, R7
+ADD R7, 1
+BRA findNewLine
+
+
+; Check for the NOOP instruction
+.NOOP
+LD R0, R6
+CMP R0, 78
+BNE noInstructionFound
+ADD R6, 1
+LD R0, R6
+CMP R0, 79
+BNE noInstructionFound
+ADD R6, 1
+LD R0, R6
+CMP R0, 79
+BNE noInstructionFound
+ADD R6, 1
+LD R0, R6
+CMP R0, 80
+BNE noInstructionFound
+; NOOP instruction confirmed
+; Set all values to 0xFF (255)
+LD R0, 255
+STL R0, R7
+ADD R7, 1
+STL R0, R7
+ADD R7, 1
+STL R0, R7
+ADD R7, 1
+STL R0, R7
+ADD R7, 1
+BRA findNewLine
+
+
+; Stores a numerical value
+.store_val
+; Currently R6 points to the first char in the value
+LD R0, R6
+CMP R0, 48
+BNE loop_val_1
+; Add 1 to R6 and check for an "x"
+ADD R6, 1
+LD R0, R6
+CMP R0, 120
+BEQ loop_hex_1
+BRA loop_val_1
+
+
+; Loops through a hex value and stores the result
+.loop_hex_1
+ADD R6, 1
+.loop_hex
+ADD R6, 1
+LD R0, R6
+CMP R0, 13
+BNE loop_hex
+SUB R6, 1
+LD R2, R6
+CMP R2, 57
+BGT readHex
+SUB R2, 48
+BRA loopback_hex_1
+
+.readHex
+CMP R2, 70
+BGT readHexLower
+SUB R2, 55
+BRA loopback_hex_1
+
+.readHexLower
+SUB R2, 87
+BRA loopback_hex_1
+
+.loopback_hex_1
+LD R1, 1
+.loopback_hex
+MULT R1, 16
+SUB R6, 1
+LD R0, R6
+CMP R0, 48
+BLT store
+CMP R0, 58
+BLT subNumber
+CMP R0, 65
+BLT store
+CMP R0, 71
+BLT subHexUpper
+CMP R0, 97
+BLT store
+CMP R0, 103
+BLT subHexLower
+BRA store
+
+.subNumber
+SUB R0, 48
+BRA finishLoop
+
+.subHexUpper
+SUB R0, 55
+BRA finishLoop
+
+.subHexLower
+SUB R0, 87
+BRA finishLoop
+
+.finishLoop
+MULT R0, R1
+ADD R2, R0
+BRA loopback_hex
+
+
+; Loops through a numerical value and stores the result
+.loop_val_1
+SUB R6, 1
+.loop_val
+ADD R6, 1
+LD R0, R6
+CMP R0, 13
+BNE loop_val
+SUB R6, 1
+LD R2, R6
+SUB R2, 48
+LD R1, 1
+.loopback_val
+MULT R1, 10
+SUB R6, 1
+LD R0, R6
+CMP R0, 48
+BLT store
+CMP R0, 57
+BGT store
+SUB R0, 48
+MULT R0, R1
+ADD R2, R0
+BRA loopback_val
+
+
+; Stores the value in R2
+.store
+ST R2, R7
+ADD R7, 2
+BRA findNewLine
+
+; Loops until a newline character is found, then increments the addr by 1 (next char) and goes back to try and
+; read the next line
+; NOTE - this diff between noInstructionFound and finding a new line can be used to write custom errors into memory
+;        and end the program early
+.findNewLine
+.noInstructionFound
+ADD R6, 1
+LD R0, R6
+CMP R0, 3
+BEQ end
+CMP R0, 13
+BNE noInstructionFound
+BRA newLine
+
+.newLine
+ADD R6, 2
+BRA readLine
+
+; Stores a label into the memory for later reference by branch instructions
+.label
+; Load R1 with 36864, the first mem addr of the label table
+LD R1, 36864
+LD R0, R1
+; If the first value in the label table is a 0, then there is no labels, store it
+CMP R0, 0
+BEQ labelStore
+; Otherwise, loop through until a CR (13) is found, meaning the end of the label
+.label_loop
+LD R0, R1
+CMP R0, 13
+BEQ label_loop_check
+ADD R1, 1
+BRA label_loop
+
+; IF YOU READ THIS CLEAN THIS SECTION UP THERE IS REDUNDANCY?
+; Check if there is another label after this one
+.label_loop_check
+ADD R1, 3
+LD R0, R1
+CMP R0, 0
+BEQ labelStore
+BRA label_loop
+
+
+; Stores the label in the table
+.labelStore
+ADD R6, 1
+LD R0, R6
+CMP R0, 13
+BEQ labelStoreAddr
+STL R0, R1
+ADD R1, 1
+BRA labelStore
+
+; Stores the address into memory
+.labelStoreAddr
+LD R0, 13
+STL R0, R1
+ADD R1, 1
+ST R5, R1
+ADD R6, 2
+BRA findLabels_loop
+
+.end
+LD R0, 0
